@@ -10,6 +10,17 @@ def fetch_statcast_data(start_date, end_date, file_name="statcast_data.csv"):
     df.to_csv(file_name, index=False)
     print(f"Data saved to {file_name}")
 
+def fetch_mlb_savant_data(start_date, end_date, file_name="statcast_data.csv"):
+    url = f"https://baseballsavant.mlb.com/statcast_search/csv?all=true&&game_date_gt={start_date}&game_date_lt={end_date}"
+
+    # Read the data into a DataFrame
+    df = pd.read_csv(url)
+    
+    # Save to CSV
+    df.to_csv(file_name, index=False)
+    print(f"Data saved to {file_name}")    
+
+
 def main():
     """Main function to handle command-line arguments."""
     parser = argparse.ArgumentParser(description="Download Statcast data for a given date range.")
