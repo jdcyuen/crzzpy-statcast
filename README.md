@@ -67,6 +67,7 @@ Quota project "crzzpy" was added to ADC which can be used by Google client libra
 
 python statcast_fetch.py -h
 python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
+python statcast_fetch.py 2024-03-01 2024-03-30 --league both
 
 
 
