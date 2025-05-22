@@ -67,9 +67,9 @@ These credentials will be used by any library that requests Application Default 
 Quota project "crzzpy" was added to ADC which can be used by Google client libraries for billing and quota. Note that some services may still bill the project owning the resource.
 
 
--python statcast_fetch.py -h
--python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
--python statcast_fetch.py 2024-03-01 2024-03-30 --league both
+* python statcast_fetch.py -h
+* python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
+* python statcast_fetch.py 2024-03-01 2024-03-30 --league both
 
 
 
