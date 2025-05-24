@@ -50,7 +50,6 @@ Google Cloud console:   https://console.cloud.google.com/welcome?project=crzzpy&
 
 Credentials saved to file: [C:\Users\Joe\AppData\Roaming\gcloud\application_default_credentials.json]
 
-```
 {
   "account": "",
   "client_id": "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com",
@@ -60,16 +59,14 @@ Credentials saved to file: [C:\Users\Joe\AppData\Roaming\gcloud\application_defa
   "type": "authorized_user",
   "universe_domain": "googleapis.com"
 }
-```
 
 These credentials will be used by any library that requests Application Default Credentials (ADC).
 
 Quota project "crzzpy" was added to ADC which can be used by Google client libraries for billing and quota. Note that some services may still bill the project owning the resource.
 
 
-* python statcast_fetch.py -h
-* python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
-* python statcast_fetch.py 2024-03-01 2024-03-30 --league both
+
+
 
 
 
