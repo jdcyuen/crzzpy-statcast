@@ -4,6 +4,8 @@ from io import StringIO
 import pandas as pd
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import csv
+import os
 
 import time
 from progress.bar import ChargingBar
@@ -21,18 +23,16 @@ HEADERS = {
     }
 
 
-'''
-    url = (
-        f"https://baseballsavant.mlb.com/statcast_search/csv?"
-        f"all=true&hfPT=&hfAB=&hfBB=&hfPR=&hfZ=&stadium=&hfBBL=&hfNewZones=&"
+
+OPTIONS = (
+        f"&hfPT=&hfAB=&hfBB=&hfPR=&hfZ=&stadium=&hfBBL=&hfNewZones=&"
         f"hfGT=R%7CPO%7CS%7C&hfC=&hfSea=&hfSit=&player_type=batter&hfOuts=&opponent=&"
-        f"pitcher_throws=&batter_stands=&hfSA=&game_date_gt={start_date}&game_date_lt={end_date}&"
+        f"pitcher_throws=&batter_stands=&hfSA=&"
         f"team=&position=&hfRO=&home_road=&hfFlag=&metric_1=&hfInn=&min_pitches=0&min_results=0&"
         f"group_by=day&sort_col=game_date&player_event_sort=api_p_release_speed&sort_order=desc"
         f"&pitch_type=&game_date=&release_speed=&release_pos_x=&release_pos_z="
-        f"&type=details"
     )
-    '''
+    
 
 
 def _daterange(start_date, end_date, delta_days):
@@ -51,7 +51,10 @@ def _fetch_chunk(start_date, end_date, base_url):
     except Exception as e:
         print(f"Failed to fetch data from {start_date} to {end_date}: {e}")
         return pd.DataFrame()
-    
+
+
+def _fetch_data_in_parallel(start_date, end_date, file_name, base_url, chunk_size=7, step_days=None, max_workers=4):
+    pass  
     
 
 def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCast_2025_all.csv"):
@@ -78,6 +81,15 @@ def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCa
     print(f"  Data saved to {file_name}") 
     bar.finish()
 
+def count_rows_in_csv(file_name):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, file_name)
+
+    with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        row_count = sum(1 for _ in reader)
+    print(f"Total number of rows in '{file_name}': {row_count}")   
+
 
 def main():
     """Main function to handle command-line arguments."""
@@ -94,16 +106,20 @@ def main():
     args = parser.parse_args()
 
     if args.league == "mlb":
- 
         fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, HEADERS, "statcast_mlb.csv")
+        count = count_rows_in_csv("statcast_mlb.csv")
 
     elif args.league == "milb":
-
          fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, HEADERS, "statcast_mlb.csv")
+         count = count_rows_in_csv("statcast_milb.csv")
 
     elif args.league == "both":
         fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, HEADERS, "statcast_mlb.csv")
+        count = count_rows_in_csv("statcast_mlb.csv")
+
         fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, HEADERS, "statcast_milb.csv")
+        count = count_rows_in_csv("statcast_milb.csv")
+
 
 if __name__ == "__main__":
     main()
