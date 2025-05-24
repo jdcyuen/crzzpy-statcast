@@ -5,6 +5,9 @@ import pandas as pd
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import time
+from progress.bar import ChargingBar
+
 import requests
 from pybaseball import statcast
 
@@ -53,6 +56,8 @@ def _fetch_chunk(start_date, end_date, base_url):
 
 def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCast_2025_all.csv"):
 
+    bar = ChargingBar('Processing', max=20)
+
     # Append date parameters to the base URL
     full_url = f"{base_url}&game_date_gt={start_date}&game_date_lt={end_date}"
 
@@ -62,11 +67,16 @@ def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCa
     # Read the data into a DataFrame
     df = pd.read_csv(StringIO(response.text))
 
+    for i in range(20):
+        # Do some work
+        time.sleep(0.5)
+    
+        bar.next()
+
     # Save to CSV
     df.to_csv(file_name, index=False)
-    print(f"Data saved to {file_name}") 
-
-
+    print(f"  Data saved to {file_name}") 
+    bar.finish()
 
 
 def main():
