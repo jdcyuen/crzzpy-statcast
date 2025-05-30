@@ -50,6 +50,7 @@ Google Cloud console:   https://console.cloud.google.com/welcome?project=crzzpy&
 
 Credentials saved to file: [C:\Users\Joe\AppData\Roaming\gcloud\application_default_credentials.json]
 
+```
 {
   "account": "",
   "client_id": "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com",
@@ -59,16 +60,34 @@ Credentials saved to file: [C:\Users\Joe\AppData\Roaming\gcloud\application_defa
   "type": "authorized_user",
   "universe_domain": "googleapis.com"
 }
+```
 
 These credentials will be used by any library that requests Application Default Credentials (ADC).
 
 Quota project "crzzpy" was added to ADC which can be used by Google client libraries for billing and quota. Note that some services may still bill the project owning the resource.
 
+To set up a virtual environment:
+1. python -m venv .venv
+2. .\.venv\Scripts\activate
+3. install required libraries in virtual environment
+
+* pip freeze > requirements.txt
+* pip install -r requirements.txt
+
+https://www.activestate.com/resources/quick-reads/how-to-uninstall-python-packages/
+To uninstall a package: 
+
+* pip uninstall <packagename>
+
+* to stop working in virtual environment type: deactivate
+* to remove virtual environment type: rm -rf .venv
 
 
 
 
-
+* python statcast_fetch.py -h
+* python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
+* python statcast_fetch.py 2024-03-01 2024-03-30 --league both
 
 
 
