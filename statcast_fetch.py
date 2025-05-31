@@ -6,6 +6,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import os
+from time import sleep
 
 import time
 from progress.bar import ChargingBar
@@ -16,7 +17,8 @@ import requests
 
 # Base URLs for MLB and MiLB
 BASE_MLB_URL = "https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details"
-BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv?all=true&type=details&minors=true"
+#BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv?all=true&type=details&minors=true"
+BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv"
 
 MLB_HEADERS = {
         "User-Agent": "Mozilla/5.0",
@@ -29,43 +31,7 @@ MiLB_HEADERS = {
 }
 
 PARAMS_DICT = {
-            "all": "true",
-            "hfPT": "",
-            "hfAB": "",
-            "hfGT": "",
-            "hfPR": "",
-            "hfZ": "",
-            "stadium": "",
-            "hfBBL": "",
-            "hfNewZones": "",
-            "hfPull": "",
-            "hfC": "",
-            "hfSea": "",
-            "hfSit": "",
-            "player_type": "batter",
-            "hfOuts": "",
-            "opponent": "",
-            "pitcher_throws": "",
-            "batter_stands": "",
-            "hfSA": "",
-'''
-            "game_date_gt": day_start,
-            "game_date_lt": day_end,
-'''
-            "team": "",
-            "position": "",
-            "hfRO": "",
-            "home_road": "",
-            "hfFlag": "",
-            "metric_1": "",
-            "hfInn": "",
-            "min_pitches": "0",
-            "min_results": "0",
-            "group_by": "name",
-            "sort_col": "game_date",
-            "player_event_sort": "h_launch_speed",
-            "sort_order": "desc",
-            "min_pas": "0",
+            "all": "true",                  
             "type": "details"
 }
 
@@ -104,31 +70,55 @@ def _fetch_data_in_parallel(start_date, end_date, file_name, base_url, chunk_siz
     pass  
     
 
-def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCast_2025_all.csv"):
+#def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCast_2025_all.csv"):
+def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_name="statCast_2025_all.csv", sleep_seconds=2):
 
-
-    bar = ChargingBar('Processing', max=20)
+    bar = ChargingBar('Processing', max=30)
 
     # Append date parameters to the base URL
-    full_url = f"{base_url}&game_date_gt={start_date}&game_date_lt={end_date}"
-    print(full_url)
-    response = requests.get(full_url, headers=headers, timeout=180)
+    #full_url = f"{base_url}&game_date_gt={start_date}&game_date_lt={end_date}"
+    #print(full_url)
 
+    all_data = []
+    current_date = datetime.strptime(start_date, "%Y-%m-%d")
+    final_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-    response.raise_for_status()
+    while current_date <= final_date:
 
-    # Read the data into a DataFrame
-    df = pd.read_csv(StringIO(response.text))
+        parameters["game_date_gt"] = current_date.strftime("%Y-%m-%d")
+        parameters["game_date_lt"] = current_date.strftime("%Y-%m-%d")
 
-    for i in range(20):
-        # Do some work
-        time.sleep(0.5)
-    
+        print(f" - Fetching data for {current_date}...", end="")
+
+        #response = requests.get(full_url, headers=headers, timeout=180)
+        response = requests.get(base_url, headers=headers, params=parameters, timeout=180)
+        response.raise_for_status()
+
+        # Read the data into a DataFrame
+        df = pd.read_csv(StringIO(response.text))
+        row_count = df.shape[0]  # Number of rows
+        print(f" Number of df rows: {row_count}")
+        if not df.empty:
+            all_data.append(df)
+
+        current_date += timedelta(days=1)
+        sleep(sleep_seconds)  # To avoid hammering the server
+
         bar.next()
 
+    if all_data:
+        full_df = pd.concat(all_data, ignore_index=True)
+        print(f" Fetched {len(full_df)} total rows.")
+        full_df.to_csv(file_name, index=False)
+        print(f"  Data saved to {file_name}", end="")
+        return full_df
+    else:
+        print(" No data found.")
+        df.to_csv(file_name, index=False)
+        return pd.DataFrame()                
+
     # Save to CSV
-    df.to_csv(file_name, index=False)
-    print(f"  Data saved to {file_name}", end="") 
+     
     bar.finish()
 
 def count_rows_in_csv(file_name):
@@ -156,18 +146,22 @@ def main():
     args = parser.parse_args()
 
     if args.league == "mlb":
-        fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, "statcast_mlb.csv")
+        fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
         count = count_rows_in_csv("statcast_mlb.csv")
 
     elif args.league == "milb":
-         fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, "statcast_milb.csv")
-         count = count_rows_in_csv("statcast_milb.csv")
+        milb_params = PARAMS_DICT.copy()
+        milb_params.update({"minors": "true"})
+        fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
+        count = count_rows_in_csv("statcast_milb.csv")
 
     elif args.league == "both":
-        fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, "statcast_mlb.csv")
+        fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
         count = count_rows_in_csv("statcast_mlb.csv")
 
-        fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, "statcast_milb.csv")
+        milb_params = PARAMS_DICT.copy()
+        milb_params.update({"minors": "true"})
+        fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
         count = count_rows_in_csv("statcast_milb.csv")
 
 
