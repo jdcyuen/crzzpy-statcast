@@ -12,22 +12,25 @@ import time
 from progress.bar import ChargingBar
 
 import requests
+from requests.exceptions import ConnectionError
 # from pybaseball import statcast
 
 
 # Base URLs for MLB and MiLB
-BASE_MLB_URL = "https://baseballsavant.mlb.com/statcast_search/csv?all=true&type=details"
+BASE_MLB_URL = "https://baseballsavant.mlb.com/statcast_search/csv"
 #BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv?all=true&type=details&minors=true"
 BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv"
 
 MLB_HEADERS = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://baseballsavant.mlb.com/statcast_search",
+        "Connection":"close"
 }
 
 MiLB_HEADERS = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://baseballsavant.mlb.com/statcast-search-minors",
+        "Connection":"close"
 }
 
 PARAMS_DICT = {
@@ -68,12 +71,24 @@ def _fetch_chunk(start_date, end_date, base_url):
 
 def _fetch_data_in_parallel(start_date, end_date, file_name, base_url, chunk_size=7, step_days=None, max_workers=4):
     pass  
+
+def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
+    # Convert string dates to datetime objects
+    start_date = datetime.strptime(start_date_str, date_format)
+    end_date = datetime.strptime(end_date_str, date_format)
     
+    # Calculate the difference
+    delta = end_date - start_date
+    
+    # Return the number of days
+    return delta.days    
 
 #def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCast_2025_all.csv"):
 def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_name="statCast_2025_all.csv", sleep_seconds=2):
 
-    bar = ChargingBar('Processing', max=30)
+    days = calculate_days(start_date, end_date)
+
+    bar = ChargingBar('Processing', max=days)
 
     # Append date parameters to the base URL
     #full_url = f"{base_url}&game_date_gt={start_date}&game_date_lt={end_date}"
@@ -91,8 +106,22 @@ def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_
         print(f" - Fetching data for {current_date}...", end="")
 
         #response = requests.get(full_url, headers=headers, timeout=180)
-        response = requests.get(base_url, headers=headers, params=parameters, timeout=180)
-        response.raise_for_status()
+
+        for i in range(3):
+            try:
+                response = requests.get(base_url, headers=headers, params=parameters, timeout=180)
+                response.raise_for_status()
+                print("Success.", end="")
+                break
+            except requests.exceptions.HTTPError as e:
+                print(f" HTTP Error occurred: Attempts {i+1} - {e} - retrying...", end="")
+                time.sleep(2)
+            except requests.exceptions.RequestException as e:
+                print(f" A RequestException occurred: Attempts {i+1} - {e} - retrying...", end="")
+                time.sleep(2)
+            except ConnectionError:
+                print(f" A ConnectionError occurred: Attempts {i+1} failed, retrying...", end="")
+                time.sleep(2)
 
         # Read the data into a DataFrame
         df = pd.read_csv(StringIO(response.text))
@@ -108,18 +137,18 @@ def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_
 
     if all_data:
         full_df = pd.concat(all_data, ignore_index=True)
-        print(f" Fetched {len(full_df)} total rows.")
+        print(f"Fetched {len(full_df)} total rows.", end="")
         full_df.to_csv(file_name, index=False)
-        print(f"  Data saved to {file_name}", end="")
+        print(f" Data saved to {file_name}. ", end="")
+        bar.finish()
         return full_df
     else:
         print(" No data found.")
         df.to_csv(file_name, index=False)
+        bar.finish()
         return pd.DataFrame()                
-
-    # Save to CSV
      
-    bar.finish()
+    
 
 def count_rows_in_csv(file_name):
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -128,7 +157,7 @@ def count_rows_in_csv(file_name):
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         row_count = sum(1 for _ in reader)
-    print(f"  Total number of rows in '{file_name}': {row_count}",  end="\n")   
+    print(f"  Total number of rows in '{file_name}': {row_count}. ",  end="\n")   
 
 
 def main():
@@ -146,16 +175,25 @@ def main():
     args = parser.parse_args()
 
     if args.league == "mlb":
+        start_time = time.time()
         fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
         count = count_rows_in_csv("statcast_mlb.csv")
+        end_time = time.time()
+        elapsed_time = (end_time - start_time)/60
+        print(f"Function took {elapsed_time:.4f} minutes")
 
     elif args.league == "milb":
+        start_time = time.time()
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
         fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
         count = count_rows_in_csv("statcast_milb.csv")
+        end_time = time.time()
+        elapsed_time = (end_time - start_time)/60
+        print(f"Function took {elapsed_time:.4f} minutes")
 
     elif args.league == "both":
+        start_time = time.time()
         fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
         count = count_rows_in_csv("statcast_mlb.csv")
 
@@ -163,7 +201,9 @@ def main():
         milb_params.update({"minors": "true"})
         fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
         count = count_rows_in_csv("statcast_milb.csv")
-
+        end_time = time.time()
+        elapsed_time = (end_time - start_time)/60
+        print(f"Function took {elapsed_time:.4f} minutes")
 
 if __name__ == "__main__":
     main()
