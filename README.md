@@ -6,9 +6,6 @@ Google Cloud console:   https://console.cloud.google.com/welcome?project=crzzpy&
 
 
 
-
-
-
 • Use the command pip install -r requirements.txt to install all packages listed in the requirements.txt file
 
 1. Ensure gcloud CLI is Installed
@@ -90,13 +87,18 @@ To uninstall a package:
 * python statcast_fetch.py 2024-03-01 2024-03-30 --league both
 
 
+Download and Install Pip on macOS
 
+python3 -m ensurepip --upgrade
 
+New changes:
 
+Steps to run on MacOS
 
-
-
-
+1. download zip file from https://github.com/jdcyuen/crzzpy-statcast, unzip to a different folder, open the folder
+2. pip3 --version to make sure you have pip installed, skip if you are sure you have it
+3. pip3 install -r requirements.txt,  this will install any new packages that has been added to the new version of the python script.
+4. python3 statcast_fetch.py 2024-03-01 2024-03-30 --league both
 
 
 
