@@ -18,7 +18,6 @@ from requests.exceptions import ConnectionError
 
 # Base URLs for MLB and MiLB
 BASE_MLB_URL = "https://baseballsavant.mlb.com/statcast_search/csv"
-#BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv?all=true&type=details&minors=true"
 BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv"
 
 MLB_HEADERS = {
@@ -37,17 +36,6 @@ PARAMS_DICT = {
             "all": "true",                  
             "type": "details"
 }
-
-'''
-OPTIONS = (
-        f"&hfPT=&hfAB=&hfBB=&hfPR=&hfZ=&stadium=&hfBBL=&hfNewZones=&"
-        f"hfGT=R%7CPO%7CS%7C&hfC=&hfSea=&hfSit=&player_type=batter&hfOuts=&opponent=&"
-        f"pitcher_throws=&batter_stands=&hfSA=&"
-        f"team=&position=&hfRO=&home_road=&hfFlag=&metric_1=&hfInn=&min_pitches=0&min_results=0&"
-        f"group_by=day&sort_col=game_date&player_event_sort=api_p_release_speed&sort_order=desc"
-        f"&pitch_type=&game_date=&release_speed=&release_pos_x=&release_pos_z="
-)
-'''  
 
 
 def _daterange(start_date, end_date, delta_days):
@@ -83,16 +71,11 @@ def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     # Return the number of days
     return delta.days    
 
-#def fetch_savant_data(start_date, end_date, base_url, headers, file_name="statCast_2025_all.csv"):
 def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_name="statCast_2025_all.csv", sleep_seconds=2):
 
     days = calculate_days(start_date, end_date)
 
     bar = ChargingBar('Processing', max=days)
-
-    # Append date parameters to the base URL
-    #full_url = f"{base_url}&game_date_gt={start_date}&game_date_lt={end_date}"
-    #print(full_url)
 
     all_data = []
     current_date = datetime.strptime(start_date, "%Y-%m-%d")
@@ -104,8 +87,6 @@ def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_
         parameters["game_date_lt"] = current_date.strftime("%Y-%m-%d")
 
         print(f" - Fetching data for {current_date}...", end="")
-
-        #response = requests.get(full_url, headers=headers, timeout=180)
 
         for i in range(3):
             try:
