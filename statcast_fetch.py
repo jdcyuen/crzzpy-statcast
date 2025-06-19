@@ -1,12 +1,14 @@
 import argparse
-from datetime import datetime, timedelta
-from io import StringIO
+import datetime
+import io
 import pandas as pd
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import os
 from time import sleep
+from logging_config import setup_logging
+import logging
 
 import time
 from progress.bar import ChargingBar
@@ -38,27 +40,131 @@ PARAMS_DICT = {
 }
 
 
-def _daterange(start_date, end_date, delta_days):
+#start_date: the beginning date of the range (expected to be a datetime.date object).
+#end_date: the end date of the range (inclusive).
+#chunk_size: how many days are in each chunk.
+#step_days: optional; how many days to move forward after each chunk. If not given, defaults to chunk_size.
+#           overlapping, non-overlapping, or gapped windows depending on step_days
+#           This uses step = chunk_size, so the chunks do not overlap
+def _daterange(start_date, end_date, chunk_size, step_days=None):
+
+    """
+    Generator that yields (chunk_number, chunk_start_date, chunk_end_date)
+    for each chunk in the date range.
+    """
+    chunk_num = 1
+    step = datetime.timedelta(days=step_days if step_days else chunk_size)
     current = start_date
+
     while current < end_date:
-        next_date = min(current + timedelta(days=delta_days), end_date)
-        yield current, next_date
-        current = next_date
+        chunk_start = current
+        chunk_end = min(current + datetime.timedelta(days=chunk_size - 1), end_date)
+        print(f"_daterange: Chunk {chunk_num}: start = {chunk_start}  end = {chunk_end}")  # 👈 print chunk_end
+        yield chunk_num, chunk_start, chunk_end
+        chunk_num += 1
+        current += step
+        
 
-def _fetch_chunk(start_date, end_date, base_url):
-    url = f"{base_url}?all=true&&game_date_gt={start_date}&game_date_lt={end_date}"
-    try:
-        df = pd.read_csv(url)
-        print(f"Fetched data from {start_date} to {end_date} ({len(df)} rows)")
-        return df
-    except Exception as e:
-        print(f"Failed to fetch data from {start_date} to {end_date}: {e}")
-        return pd.DataFrame()
+def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, max_retries=3, backoff_factor=2):
+    """
+    Fetch a chunk of data from Baseball Savant using HTTP headers to avoid 403 errors.
+    """
+    #url = f"{base_url}?all=true&&game_date_gt={start_date_str}&game_date_lt={end_date_str}"
+    #headers = {"User-Agent": "Mozilla/5.0"}
+
+    parameters["game_date_gt"] = start_date_str
+    parameters["game_date_lt"] = end_date_str
+
+    #print(f"base url: {base_url}")
+    #print(f"headers: {headers}")
+    #print(f"parameters: {parameters}")
+
+    attempt = 0
+    while attempt <= max_retries:
+        try:
+            response = requests.get(base_url, headers=headers, params=parameters, timeout=180)
+            response.raise_for_status()  # Raise HTTPError for bad status codes
+
+            df = pd.read_csv(io.BytesIO(response.content))
+            print(f"✅========== _fetch_chunk: Downloaded data from {start_date_str} to {end_date_str} ({len(df)} rows)")
+            return df
+
+        except requests.exceptions.HTTPError as http_err:
+            print(f"❌ HTTP error from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {http_err}")
+            attempt += 1
+            if attempt > max_retries:
+                logging.error(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
+                break
+            sleep_time = backoff_factor ** attempt
+            logging.info(f"⏳ Retrying after {sleep_time} seconds...")
+            time.sleep(sleep_time)
+
+        except requests.exceptions.RequestException as req_err:
+            print(f"❌ Request failed from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {req_err}")
+            attempt += 1
+            if attempt > max_retries:
+                logging.error(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
+                break
+            sleep_time = backoff_factor ** attempt
+            logging.info(f"⏳ Retrying after {sleep_time} seconds...")
+            time.sleep(sleep_time)
+
+        except pd.errors.EmptyDataError:
+            print(f"⚠️ No data returned from {start_date_str} to {end_date_str}")
+        except Exception as e:
+            print(f"❌ Failed to fetch data from {start_date_str} to {end_date_str}: {e}")
+            return None
+
+#Input Parameters:   
+#   start_date, end_date: Strings in the format YYYY-MM-DD representing the full date range.
+#   base_url: API endpoint or base URL used to fetch Statcast data.
+#   headers:
+#   parameters:
+#   file_name: Path to the output CSV file.
+#   chunk_size: How many days of data each chunk should cover (default is 7).
+#   step_days: Optional; if set, controls the sliding window step size (e.g., step size smaller than chunk size means overlapping).
+#   max_workers: Number of threads to use concurrently.
+
+def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters, file_name, chunk_size=7, step_days=None, max_workers=4):
+    """
+    Shared logic to fetch Statcast data in parallel and write to a CSV file.
+    """
+    start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+    end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+
+    futures = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for chunk_num, chunk_start, chunk_end in _daterange(start_dt, end_dt, chunk_size, step_days):
+            chunk_start_str = chunk_start.strftime("%Y-%m-%d")
+            chunk_end_str = chunk_end.strftime("%Y-%m-%d")
+            
+            future = executor.submit(_fetch_chunk, chunk_start_str, chunk_end_str, base_url, headers, parameters)
+            future.chunk_info = (chunk_start_str, chunk_end_str)  # attach chunk info
+            futures.append(future)
 
 
+    all_data = []
+    for future in as_completed(futures):
+        chunk_start_str, chunk_end_str = future.chunk_info
+        try:
+            df_chunk = future.result()
 
-def _fetch_data_in_parallel(start_date, end_date, file_name, base_url, chunk_size=7, step_days=None, max_workers=4):
-    pass  
+            if df_chunk is None:
+                print(f"fetch_data_in_parallel: df_chunk is None for {chunk_start_str} to {chunk_end_str}")
+            elif df_chunk.empty:
+                print(f"fetch_data_in_parallel: df_chunk is empty for {chunk_start_str} to {chunk_end_str}")
+            else:
+                print(f"fetch_data_in_parallel: Appending chunk for {chunk_start_str} to {chunk_end_str}")
+                all_data.append(df_chunk)
+        except Exception as e:
+            print(f"💥 fetch_data_in_parallel: Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
+
+    if all_data:	
+        final_df = pd.concat(all_data, ignore_index=True)
+        final_df.to_csv(file_name, index=False)
+        print(f"\n💾fetch_data_in_parallel: Data saved to {file_name} ({len(final_df)} total rows)")
+    else:
+        print("⚠️ fetch_data_in_parallel: No data fetched.")
 
 def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     # Convert string dates to datetime objects
@@ -70,79 +176,29 @@ def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     
     # Return the number of days
     return delta.days    
-
-def fetch_savant_data(start_date, end_date, base_url, headers, parameters, file_name="statCast_2025_all.csv", sleep_seconds=2):
-
-    days = calculate_days(start_date, end_date)
-
-    bar = ChargingBar('Processing', max=days)
-
-    all_data = []
-    current_date = datetime.strptime(start_date, "%Y-%m-%d")
-    final_date = datetime.strptime(end_date, "%Y-%m-%d")
-
-    while current_date <= final_date:
-
-        parameters["game_date_gt"] = current_date.strftime("%Y-%m-%d")
-        parameters["game_date_lt"] = current_date.strftime("%Y-%m-%d")
-
-        print(f" - Fetching data for {current_date}...", end="")
-
-        for i in range(3):
-            try:
-                response = requests.get(base_url, headers=headers, params=parameters, timeout=180)
-                response.raise_for_status()
-                print("Success.", end="")
-                break
-            except requests.exceptions.HTTPError as e:
-                print(f" HTTP Error occurred: Attempts {i+1} - {e} - retrying...", end="")
-                time.sleep(2)
-            except requests.exceptions.RequestException as e:
-                print(f" A RequestException occurred: Attempts {i+1} - {e} - retrying...", end="")
-                time.sleep(2)
-            except ConnectionError:
-                print(f" A ConnectionError occurred: Attempts {i+1} failed, retrying...", end="")
-                time.sleep(2)
-
-        # Read the data into a DataFrame
-        df = pd.read_csv(StringIO(response.text))
-        row_count = df.shape[0]  # Number of rows
-        print(f" Number of df rows: {row_count}")
-        if not df.empty:
-            all_data.append(df)
-
-        current_date += timedelta(days=1)
-        sleep(sleep_seconds)  # To avoid hammering the server
-
-        bar.next()
-
-    if all_data:
-        full_df = pd.concat(all_data, ignore_index=True)
-        print(f"Fetched {len(full_df)} total rows.", end="")
-        full_df.to_csv(file_name, index=False)
-        print(f" Data saved to {file_name}. ", end="")
-        bar.finish()
-        return full_df
-    else:
-        print(" No data found.")
-        df.to_csv(file_name, index=False)
-        bar.finish()
-        return pd.DataFrame()                
-     
-    
+  
 
 def count_rows_in_csv(file_name):
+    print(f"count_rows_in_csv:  Counting rows in csv file. ",  end="\n") 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, file_name)
+
+    if not os.path.exists(file_path):
+        print(f"⚠️ File not found: {file_path}")
+        return 0  # or raise an exception
 
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         row_count = sum(1 for _ in reader)
-    print(f"  Total number of rows in '{file_name}': {row_count}. ",  end="\n")   
+    print(f"count_rows_in_csv: Total number of rows in '{file_name}': {row_count}. ",  end="\n")   
 
 
 def main():
-    """Main function to handle command-line arguments."""
+
+    setup_logging()
+    logger = logging.getLogger(__name__)
+
+    #Main function to handle command-line arguments.
     parser = argparse.ArgumentParser(description="Download Statcast data for a given date range.")
     parser.add_argument("start_date", type=str, help="Start date (YYYY-MM-DD)")
     parser.add_argument("end_date", type=str, help="End date (YYYY-MM-DD)")
@@ -157,7 +213,9 @@ def main():
 
     if args.league == "mlb":
         start_time = time.time()
-        fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
+        #fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
+        print(f"Getting data for mlb")
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_mlb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
@@ -167,7 +225,9 @@ def main():
         start_time = time.time()
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
-        fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
+        print(f"Getting data for milb")
+        #fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_milb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
@@ -175,12 +235,16 @@ def main():
 
     elif args.league == "both":
         start_time = time.time()
-        fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
+        #fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
+        print(f"Getting data for mlb")
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_mlb.csv")
-
+        print(f"=========================================================================================================================")
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
-        fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
+        #fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
+        print(f"Getting data for milb")
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_milb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
