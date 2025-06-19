@@ -87,13 +87,13 @@ To uninstall a package:
 * python statcast_fetch.py 2024-03-01 2024-03-30 --league both
 
 
-Download and Install Pip on macOS
+Download and Install Pip on macOS:
 
-python3 -m ensurepip --upgrade
+* python3 -m ensurepip --upgrade
 
 New changes:
 
-Steps to run on MacOS
+Steps to run on MacOS:
 
 1. download zip file from https://github.com/jdcyuen/crzzpy-statcast, unzip to a different folder, open the folder
 2. pip3 --version to make sure you have pip installed, skip if you are sure you have it
