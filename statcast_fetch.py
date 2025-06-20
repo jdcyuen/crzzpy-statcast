@@ -11,7 +11,7 @@ from logging_config import setup_logging
 import logging
 import sys
 import time
-
+import threading
 
 import requests
 from requests.exceptions import ConnectionError
@@ -72,7 +72,7 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
     """
     Fetch a chunk of data from Baseball Savant using HTTP headers to avoid 403 errors.
     """
-    threading.current_thread().name = f"Fetcher-{start_date_str}_to_{end_date_str}"
+    #threading.current_thread().name = f"Fetcher-{start_date_str}_to_{end_date_str}"
 
     params_copy = parameters.copy()
     params_copy["game_date_gt"] = start_date_str
@@ -126,52 +126,70 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
 #   chunk_size: How many days of data each chunk should cover (default is 7).
 #   step_days: Optional; if set, controls the sliding window step size (e.g., step size smaller than chunk size means overlapping).
 #   max_workers: Number of threads to use concurrently.
-
 def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters, file_name, chunk_size=7, step_days=None, max_workers=4):
     """
     Shared logic to fetch Statcast data in parallel and write to a CSV file.
     """
     start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
     end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-  
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        chunks = list(_daterange(start_dt, end_dt, chunk_size, step_days))
-        for chunk_num, chunk_start, chunk_end in tqdm(list(_daterange(start_dt, end_dt, chunk_size, step_days)), desc="Submitting chunks", unit="chunk", file=sys.stdout, disable=False):
-
-            chunk_start_str = chunk_start.strftime("%Y-%m-%d")
-            chunk_end_str = chunk_end.strftime("%Y-%m-%d")
-            
-            logging.debug(f"📥 Starting download for chunk {chunk_start_str} to {chunk_end_str}")
-            future = executor.submit(_fetch_chunk, chunk_start_str, chunk_end_str, base_url, headers, parameters)
-            future.chunk_info = (chunk_start_str, chunk_end_str)  # attach chunk info
-            futures.append(future)
-
 
     all_data = []
-    #for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading chunks", unit="chunk"):
-    for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading chunks", unit="chunk", file=sys.stdout, disable=False):    
+    chunks = list(_daterange(start_dt, end_dt, chunk_size, step_days))
 
-        chunk_start_str, chunk_end_str = future.chunk_info
-        try:
-            df_chunk = future.result()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
 
-            if df_chunk is None:
-                logging.debug(f"df_chunk is None for {chunk_start_str} to {chunk_end_str}")
-            elif df_chunk.empty:
-                logging.debug(f"df_chunk is empty for {chunk_start_str} to {chunk_end_str}")
-            else:
-                logging.debug(f"Appending chunk for {chunk_start_str} to {chunk_end_str}")
-                all_data.append(df_chunk)
-        except Exception as e:
-            logging.debug(f"💥 Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
+        # Progress bar for submitting
+        with tqdm(total=len(chunks), desc="Submitting chunks", unit="chunk", file=sys.stdout) as submit_bar:
+            #for chunk_start, chunk_end in chunks:
+            for _, chunk_start, chunk_end in chunks:
 
-    if all_data:	
+                chunk_start_str = chunk_start.strftime("%Y-%m-%d")
+                chunk_end_str = chunk_end.strftime("%Y-%m-%d")
+                
+                logging.debug(f"📥 Submitting download for chunk {chunk_start_str} to {chunk_end_str}")
+                future = executor.submit(_fetch_chunk, chunk_start_str, chunk_end_str, base_url, headers, parameters)
+                future.chunk_info = (chunk_start_str, chunk_end_str)
+                futures.append(future)
+                submit_bar.update(1)
+
+        # Progress bar for downloading
+        with tqdm(total=len(futures), desc="Downloading chunks", unit="chunk", file=sys.stdout) as download_bar:
+            for future in as_completed(futures):
+                chunk_start_str, chunk_end_str = future.chunk_info
+                try:
+                    df_chunk = future.result()
+
+                    if df_chunk is None:
+                        logging.debug(f"df_chunk is None for {chunk_start_str} to {chunk_end_str}")
+                    elif df_chunk.empty:
+                        logging.debug(f"df_chunk is empty for {chunk_start_str} to {chunk_end_str}")
+                    else:
+                        logging.debug(f"Appending chunk for {chunk_start_str} to {chunk_end_str}")
+                        all_data.append(df_chunk)
+                except Exception as e:
+                    logging.debug(f"💥 Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
+                finally:
+                    download_bar.update(1)
+
+    if all_data:
+        logging.debug("⚠️ Saving data to file...")
         final_df = pd.concat(all_data, ignore_index=True)
-        final_df.to_csv(file_name, index=False)
-        logging.debug(f"💾Data saved to {file_name} ({len(final_df)} total rows)")
+
+        with open(file_name, mode='w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+
+            # Write header
+            writer.writerow(final_df.columns)
+
+            # Write rows with progress bar
+            for row in tqdm(final_df.itertuples(index=False, name=None), total=len(final_df), desc="Saving data to CSV", unit="row"):
+                writer.writerow(row)
+
+        logging.debug(f"💾 Data saved to {file_name} ({len(final_df)} total rows)")
     else:
         logging.debug("⚠️ No data fetched.")
+
 
 def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     # Convert string dates to datetime objects
@@ -186,19 +204,31 @@ def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
   
 
 def count_rows_in_csv(file_name):
-    logging.debug("Counting rows in csv file... ") 
+    logging.debug("Counting rows in csv file...")
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, file_name)
 
     if not os.path.exists(file_path):
-        logging.debug(f"⚠️ File not found: {file_path}")
-        return 0  # or raise an exception
+        logging.warning(f"⚠️ File not found: {file_path}")
+        return 0
 
-    with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
-        reader = csv.reader(csvfile)
-        row_count = sum(1 for _ in reader)
-    logging.info(f"Total number of rows in '{file_name}': {row_count}. ")   
-    return row_count
+    try:
+        # First, count total lines for progress bar length
+        with open(file_path, 'r', encoding='utf-8') as f:
+            total_lines = sum(1 for _ in f)
+
+        with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
+            reader = csv.reader(csvfile)
+            row_count = 0
+            for _ in tqdm(reader, total=total_lines, desc="Counting rows", unit="row"):
+                row_count += 1
+
+        logging.info(f"Total number of rows in '{file_name}': {row_count}")
+        return row_count
+
+    except Exception as e:
+        logging.error(f"❌ Error reading '{file_name}': {e}")
+        return 0
 
 
 def main():
