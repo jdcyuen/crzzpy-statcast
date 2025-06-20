@@ -2,7 +2,7 @@ import argparse
 import datetime
 import io
 import pandas as pd
-import urllib.request
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import os
@@ -75,15 +75,16 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
     #url = f"{base_url}?all=true&&game_date_gt={start_date_str}&game_date_lt={end_date_str}"
     #headers = {"User-Agent": "Mozilla/5.0"}
 
-    parameters["game_date_gt"] = start_date_str
-    parameters["game_date_lt"] = end_date_str
+    params_copy = parameters.copy()
+    params_copy["game_date_gt"] = start_date_str
+    params_copy["game_date_lt"] = end_date_str
 
-    logging.debug(f"\nbase url: {base_url} \nheaders: {headers} \nparameters: {parameters}")
+    logging.debug(f"\nbase url: {base_url} \nheaders: {headers} \nparameters: {params_copy}")
 
     attempt = 0
     while attempt <= max_retries:
         try:
-            response = requests.get(base_url, headers=headers, params=parameters, timeout=180)
+            response = requests.get(base_url, headers=headers, params=params_copy, timeout=180)
             response.raise_for_status()  # Raise HTTPError for bad status codes
 
             df = pd.read_csv(io.BytesIO(response.content))
@@ -139,6 +140,7 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
             chunk_start_str = chunk_start.strftime("%Y-%m-%d")
             chunk_end_str = chunk_end.strftime("%Y-%m-%d")
             
+            logging.debug(f"📥 Starting download for chunk {chunk_start_str} to {chunk_end_str}")
             future = executor.submit(_fetch_chunk, chunk_start_str, chunk_end_str, base_url, headers, parameters)
             future.chunk_info = (chunk_start_str, chunk_end_str)  # attach chunk info
             futures.append(future)
@@ -158,7 +160,7 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
                 logging.debug(f"Appending chunk for {chunk_start_str} to {chunk_end_str}")
                 all_data.append(df_chunk)
         except Exception as e:
-            logging.indebugfo(f"💥 Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
+            logging.debug(f"💥 Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
 
     if all_data:	
         final_df = pd.concat(all_data, ignore_index=True)
@@ -208,7 +210,7 @@ def main():
     parser.add_argument("--chunk_size", type=int, default=7, help="Days per chunk")
     parser.add_argument("--step_days", type=int, help="Optional custom step between chunks")
     parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel threads")
-    parser.add_argument( "--log", default="INFO", help="Set the logging level (debug, info, warning, error, critical)")
+    parser.add_argument("--log", default="INFO", help="Set the logging level: DEBUG, INFO, WARNING, ERROR, or CRITICAL (default: INFO)")
 
     args = parser.parse_args()
     setup_logging(args.log)
@@ -251,7 +253,7 @@ def main():
         count = count_rows_in_csv("statcast_milb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
-        logging.info(f"Function took {elapsed_time:.4f} minutes")
+        logging.info(f"Function took {elapsed_time:.4f} minutes for both")
 
 if __name__ == "__main__":
     main()
