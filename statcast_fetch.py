@@ -2,16 +2,16 @@ import argparse
 import datetime
 import io
 import pandas as pd
-
+from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import os
 from time import sleep
 from logging_config import setup_logging
 import logging
-
+import sys
 import time
-from progress.bar import ChargingBar
+
 
 import requests
 from requests.exceptions import ConnectionError
@@ -72,8 +72,7 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
     """
     Fetch a chunk of data from Baseball Savant using HTTP headers to avoid 403 errors.
     """
-    #url = f"{base_url}?all=true&&game_date_gt={start_date_str}&game_date_lt={end_date_str}"
-    #headers = {"User-Agent": "Mozilla/5.0"}
+    threading.current_thread().name = f"Fetcher-{start_date_str}_to_{end_date_str}"
 
     params_copy = parameters.copy()
     params_copy["game_date_gt"] = start_date_str
@@ -92,29 +91,30 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
             return df
 
         except requests.exceptions.HTTPError as http_err:
-            logging.debug(f"❌ HTTP error from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {http_err}")
+            logging.error(f"❌ HTTP error from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {http_err}")
             attempt += 1
             if attempt > max_retries:
-                logging.debug(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
+                logging.error(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
                 break
             sleep_time = backoff_factor ** attempt
-            logging.debug(f"⏳ Retrying after {sleep_time} seconds...")
+            logging.error(f"⏳ Retrying after {sleep_time} seconds...")
             time.sleep(sleep_time)
 
         except requests.exceptions.RequestException as req_err:
-            logging.debug(f"❌ Request failed from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {req_err}")
+            logging.error(f"❌ Request failed from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {req_err}")
             attempt += 1
             if attempt > max_retries:
-                logging.debug(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
+                logging.error(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
                 break
             sleep_time = backoff_factor ** attempt
-            logging.debug(f"⏳ Retrying after {sleep_time} seconds...")
+            logging.error(f"⏳ Retrying after {sleep_time} seconds...")
             time.sleep(sleep_time)
 
         except pd.errors.EmptyDataError:
-            logging.debug(f"⚠️ No data returned from {start_date_str} to {end_date_str}")
+            logging.error(f"⚠️ No data returned from {start_date_str} to {end_date_str}")
+            return pd.DataFrame()  # ⬅️ Explicitly return empty DataFrame
         except Exception as e:
-            logging.debug(f"❌ Failed to fetch data from {start_date_str} to {end_date_str}: {e}")
+            logging.error(f"❌ Failed to fetch data from {start_date_str} to {end_date_str}: {e}")
             return None
 
 #Input Parameters:   
@@ -133,10 +133,12 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
     """
     start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
     end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
-
-    futures = []
+  
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for chunk_num, chunk_start, chunk_end in _daterange(start_dt, end_dt, chunk_size, step_days):
+        futures = []
+        chunks = list(_daterange(start_dt, end_dt, chunk_size, step_days))
+        for chunk_num, chunk_start, chunk_end in tqdm(list(_daterange(start_dt, end_dt, chunk_size, step_days)), desc="Submitting chunks", unit="chunk", file=sys.stdout, disable=False):
+
             chunk_start_str = chunk_start.strftime("%Y-%m-%d")
             chunk_end_str = chunk_end.strftime("%Y-%m-%d")
             
@@ -147,7 +149,9 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
 
 
     all_data = []
-    for future in as_completed(futures):
+    #for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading chunks", unit="chunk"):
+    for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading chunks", unit="chunk", file=sys.stdout, disable=False):    
+
         chunk_start_str, chunk_end_str = future.chunk_info
         try:
             df_chunk = future.result()
@@ -194,6 +198,7 @@ def count_rows_in_csv(file_name):
         reader = csv.reader(csvfile)
         row_count = sum(1 for _ in reader)
     logging.info(f"Total number of rows in '{file_name}': {row_count}. ")   
+    return row_count
 
 
 def main():
@@ -218,10 +223,10 @@ def main():
 
     if args.league == "mlb":
         start_time = time.time()
-        #fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
         logging.info("Getting data for mlb")
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv", chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv("statcast_mlb.csv")
+        file_name = args.file if args.file else "statcast_mlb.csv"
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=7, step_days=None, max_workers=4)
+        count = count_rows_in_csv(file_name)
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes")
@@ -231,26 +236,28 @@ def main():
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
         logging.info("Getting data for milb")
-        #fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv", chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv("statcast_milb.csv")
+        file_name = args.file if args.file else "statcast_milb.csv"
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=7, step_days=None, max_workers=4)
+        count = count_rows_in_csv(file_name)
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes")
 
     elif args.league == "both":
         start_time = time.time()
-        #fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
+        
         logging.info(f"Getting data for mlb")
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv", chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv("statcast_mlb.csv")
+        file_name = args.file if args.file else "statcast_mlb.csv"
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=7, step_days=None, max_workers=4)
+        count = count_rows_in_csv(file_name)
         print(f"=========================================================================================================================")
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
-        #fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
+       
         logging.info("Getting data for milb")
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv", chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv("statcast_milb.csv")
+        file_name = args.file.replace(".csv", "_milb.csv") if args.file else "statcast_milb.csv"
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=7, step_days=None, max_workers=4)
+        count = count_rows_in_csv(file_name)
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes for both")
