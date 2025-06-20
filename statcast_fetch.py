@@ -18,6 +18,9 @@ from requests.exceptions import ConnectionError
 # from pybaseball import statcast
 
 
+logger = logging.getLogger(__name__)
+
+
 # Base URLs for MLB and MiLB
 BASE_MLB_URL = "https://baseballsavant.mlb.com/statcast_search/csv"
 BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv"
@@ -59,7 +62,7 @@ def _daterange(start_date, end_date, chunk_size, step_days=None):
     while current < end_date:
         chunk_start = current
         chunk_end = min(current + datetime.timedelta(days=chunk_size - 1), end_date)
-        print(f"_daterange: Chunk {chunk_num}: start = {chunk_start}  end = {chunk_end}")  # 👈 print chunk_end
+        logging.debug(f"Chunk {chunk_num}: start = {chunk_start}  end = {chunk_end}")  # 👈 print chunk_end
         yield chunk_num, chunk_start, chunk_end
         chunk_num += 1
         current += step
@@ -75,9 +78,7 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
     parameters["game_date_gt"] = start_date_str
     parameters["game_date_lt"] = end_date_str
 
-    #print(f"base url: {base_url}")
-    #print(f"headers: {headers}")
-    #print(f"parameters: {parameters}")
+    logging.debug(f"\nbase url: {base_url} \nheaders: {headers} \nparameters: {parameters}")
 
     attempt = 0
     while attempt <= max_retries:
@@ -86,33 +87,33 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
             response.raise_for_status()  # Raise HTTPError for bad status codes
 
             df = pd.read_csv(io.BytesIO(response.content))
-            print(f"✅========== _fetch_chunk: Downloaded data from {start_date_str} to {end_date_str} ({len(df)} rows)")
+            logging.debug(f"✅========== Downloaded data from {start_date_str} to {end_date_str} ({len(df)} rows)")
             return df
 
         except requests.exceptions.HTTPError as http_err:
-            print(f"❌ HTTP error from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {http_err}")
+            logging.debug(f"❌ HTTP error from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {http_err}")
             attempt += 1
             if attempt > max_retries:
-                logging.error(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
+                logging.debug(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
                 break
             sleep_time = backoff_factor ** attempt
-            logging.info(f"⏳ Retrying after {sleep_time} seconds...")
+            logging.debug(f"⏳ Retrying after {sleep_time} seconds...")
             time.sleep(sleep_time)
 
         except requests.exceptions.RequestException as req_err:
-            print(f"❌ Request failed from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {req_err}")
+            logging.debug(f"❌ Request failed from {start_date_str} to {end_date_str}, Request attempt {attempt + 1} failed: {req_err}")
             attempt += 1
             if attempt > max_retries:
-                logging.error(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
+                logging.debug(f"❌ All {max_retries} retries failed for {start_date_str} to {end_date_str}")
                 break
             sleep_time = backoff_factor ** attempt
-            logging.info(f"⏳ Retrying after {sleep_time} seconds...")
+            logging.debug(f"⏳ Retrying after {sleep_time} seconds...")
             time.sleep(sleep_time)
 
         except pd.errors.EmptyDataError:
-            print(f"⚠️ No data returned from {start_date_str} to {end_date_str}")
+            logging.debug(f"⚠️ No data returned from {start_date_str} to {end_date_str}")
         except Exception as e:
-            print(f"❌ Failed to fetch data from {start_date_str} to {end_date_str}: {e}")
+            logging.debug(f"❌ Failed to fetch data from {start_date_str} to {end_date_str}: {e}")
             return None
 
 #Input Parameters:   
@@ -150,21 +151,21 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
             df_chunk = future.result()
 
             if df_chunk is None:
-                print(f"fetch_data_in_parallel: df_chunk is None for {chunk_start_str} to {chunk_end_str}")
+                logging.debug(f"df_chunk is None for {chunk_start_str} to {chunk_end_str}")
             elif df_chunk.empty:
-                print(f"fetch_data_in_parallel: df_chunk is empty for {chunk_start_str} to {chunk_end_str}")
+                logging.debug(f"df_chunk is empty for {chunk_start_str} to {chunk_end_str}")
             else:
-                print(f"fetch_data_in_parallel: Appending chunk for {chunk_start_str} to {chunk_end_str}")
+                logging.debug(f"Appending chunk for {chunk_start_str} to {chunk_end_str}")
                 all_data.append(df_chunk)
         except Exception as e:
-            print(f"💥 fetch_data_in_parallel: Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
+            logging.indebugfo(f"💥 Exception for chunk {chunk_start_str} to {chunk_end_str}: {e}")
 
     if all_data:	
         final_df = pd.concat(all_data, ignore_index=True)
         final_df.to_csv(file_name, index=False)
-        print(f"\n💾fetch_data_in_parallel: Data saved to {file_name} ({len(final_df)} total rows)")
+        logging.debug(f"💾Data saved to {file_name} ({len(final_df)} total rows)")
     else:
-        print("⚠️ fetch_data_in_parallel: No data fetched.")
+        logging.debug("⚠️ No data fetched.")
 
 def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     # Convert string dates to datetime objects
@@ -179,24 +180,23 @@ def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
   
 
 def count_rows_in_csv(file_name):
-    print(f"count_rows_in_csv:  Counting rows in csv file. ",  end="\n") 
+    logging.debug("Counting rows in csv file... ") 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, file_name)
 
     if not os.path.exists(file_path):
-        print(f"⚠️ File not found: {file_path}")
+        logging.debug(f"⚠️ File not found: {file_path}")
         return 0  # or raise an exception
 
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         row_count = sum(1 for _ in reader)
-    print(f"count_rows_in_csv: Total number of rows in '{file_name}': {row_count}. ",  end="\n")   
+    logging.info(f"Total number of rows in '{file_name}': {row_count}. ")   
 
 
 def main():
 
-    setup_logging()
-    logger = logging.getLogger(__name__)
+    
 
     #Main function to handle command-line arguments.
     parser = argparse.ArgumentParser(description="Download Statcast data for a given date range.")
@@ -208,47 +208,50 @@ def main():
     parser.add_argument("--chunk_size", type=int, default=7, help="Days per chunk")
     parser.add_argument("--step_days", type=int, help="Optional custom step between chunks")
     parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel threads")
+    parser.add_argument( "--log", default="INFO", help="Set the logging level (debug, info, warning, error, critical)")
 
     args = parser.parse_args()
+    setup_logging(args.log)
+
 
     if args.league == "mlb":
         start_time = time.time()
         #fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
-        print(f"Getting data for mlb")
+        logging.info("Getting data for mlb")
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_mlb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
-        print(f"Function took {elapsed_time:.4f} minutes")
+        logging.info(f"Function took {elapsed_time:.4f} minutes")
 
     elif args.league == "milb":
         start_time = time.time()
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
-        print(f"Getting data for milb")
+        logging.info("Getting data for milb")
         #fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_milb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
-        print(f"Function took {elapsed_time:.4f} minutes")
+        logging.info(f"Function took {elapsed_time:.4f} minutes")
 
     elif args.league == "both":
         start_time = time.time()
         #fetch_savant_data(args.start_date, args.end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv")
-        print(f"Getting data for mlb")
+        logging.info(f"Getting data for mlb")
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, "statcast_mlb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_mlb.csv")
         print(f"=========================================================================================================================")
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
         #fetch_savant_data(args.start_date, args.end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv")
-        print(f"Getting data for milb")
+        logging.info("Getting data for milb")
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, "statcast_milb.csv", chunk_size=7, step_days=None, max_workers=4)
         count = count_rows_in_csv("statcast_milb.csv")
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
-        print(f"Function took {elapsed_time:.4f} minutes")
+        logging.info(f"Function took {elapsed_time:.4f} minutes")
 
 if __name__ == "__main__":
     main()
