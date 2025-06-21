@@ -9,13 +9,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import os
 from time import sleep
-from logging_config import setup_logging
+from config.logging_config import setup_logging
 import logging
 import sys
 import time
 import threading
 
-from config import BASE_MLB_URL, BASE_MiLB_URL, MLB_HEADERS, MiLB_HEADERS, PARAMS_DICT
+from config.config import BASE_MLB_URL, BASE_MiLB_URL, MLB_HEADERS, MiLB_HEADERS, PARAMS_DICT
 
 import requests
 from requests.exceptions import ConnectionError
