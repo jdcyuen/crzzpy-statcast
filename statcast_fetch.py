@@ -186,7 +186,7 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
             for row in tqdm(final_df.itertuples(index=False, name=None), total=len(final_df), desc="Saving data to CSV", unit="row"):
                 writer.writerow(row)
 
-        logging.debug(f"💾 Data saved to {file_name} ({len(final_df)} total rows)")
+        logging.info(f"💾 Data saved to {file_name} ({len(final_df)} total rows)")
     else:
         logging.debug("⚠️ No data fetched.")
 
@@ -203,37 +203,7 @@ def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     return delta.days    
   
 
-def count_rows_in_csv(file_name):
-    logging.debug("Counting rows in csv file...")
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, file_name)
-
-    if not os.path.exists(file_path):
-        logging.warning(f"⚠️ File not found: {file_path}")
-        return 0
-
-    try:
-        # First, count total lines for progress bar length
-        with open(file_path, 'r', encoding='utf-8') as f:
-            total_lines = sum(1 for _ in f)
-
-        with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            row_count = 0
-            for _ in tqdm(reader, total=total_lines, desc="Counting rows", unit="row"):
-                row_count += 1
-
-        logging.info(f"Total number of rows in '{file_name}': {row_count}")
-        return row_count
-
-    except Exception as e:
-        logging.error(f"❌ Error reading '{file_name}': {e}")
-        return 0
-
-
-def main():
-
-    
+def main():    
 
     #Main function to handle command-line arguments.
     parser = argparse.ArgumentParser(description="Download Statcast data for a given date range.")
@@ -256,7 +226,7 @@ def main():
         logging.info("Getting data for mlb")
         file_name = args.file if args.file else "statcast_mlb.csv"
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv(file_name)
+
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes")
@@ -268,7 +238,7 @@ def main():
         logging.info("Getting data for milb")
         file_name = args.file if args.file else "statcast_milb.csv"
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv(file_name)
+
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes")
@@ -279,7 +249,7 @@ def main():
         logging.info(f"Getting data for mlb")
         file_name = args.file if args.file else "statcast_mlb.csv"
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv(file_name)
+
         print(f"=========================================================================================================================")
         milb_params = PARAMS_DICT.copy()
         milb_params.update({"minors": "true"})
@@ -287,7 +257,7 @@ def main():
         logging.info("Getting data for milb")
         file_name = args.file.replace(".csv", "_milb.csv") if args.file else "statcast_milb.csv"
         _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=7, step_days=None, max_workers=4)
-        count = count_rows_in_csv(file_name)
+
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes for both")
