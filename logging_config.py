@@ -12,7 +12,7 @@ ALLOWED_LEVELS = {
     "NOTSET": logging.NOTSET
 }
 
-def setup_logging(level_name: str):
+def setup_logging(level_name: str, log_file: str = "app.log"):
     level_name_upper = level_name.upper()
     if level_name_upper not in ALLOWED_LEVELS:
         print(f"❌ Invalid log level: '{level_name}'")
@@ -36,8 +36,16 @@ def setup_logging(level_name: str):
         }
     ))
 
+     # File handler (no color)
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')  # or mode='a' to append
+    file_handler.setFormatter(logging.Formatter(
+        fmt="[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+
     # Clear root logger handlers and apply colorlog setup
     root_logger = colorlog.getLogger()
     root_logger.setLevel(ALLOWED_LEVELS[level_name_upper])
     root_logger.handlers = []  # Clear existing handlers
     root_logger.addHandler(handler)
+    root_logger.addHandler(file_handler)

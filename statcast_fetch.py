@@ -1,6 +1,8 @@
 import argparse
 import datetime
 import io
+# writers/base_writer.py
+from abc import ABC, abstractmethod
 import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,6 +15,8 @@ import sys
 import time
 import threading
 
+from config import BASE_MLB_URL, BASE_MiLB_URL, MLB_HEADERS, MiLB_HEADERS, PARAMS_DICT
+
 import requests
 from requests.exceptions import ConnectionError
 # from pybaseball import statcast
@@ -20,28 +24,42 @@ from requests.exceptions import ConnectionError
 
 logger = logging.getLogger(__name__)
 
+class DataWriter(ABC):
+    @abstractmethod
+    def write(self, df: pd.DataFrame, file_name: str):
+        pass
 
-# Base URLs for MLB and MiLB
-BASE_MLB_URL = "https://baseballsavant.mlb.com/statcast_search/csv"
-BASE_MiLB_URL = "https://baseballsavant.mlb.com/statcast-search-minors/csv"
+class CSVWriter(DataWriter):
+    def write(self, df: pd.DataFrame, file_name: str):
+        with open(file_name, mode='w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(df.columns)
+            for row in tqdm(df.itertuples(index=False, name=None), total=len(df), desc="Saving to CSV", unit="row"):
+                writer.writerow(row)
+class ParquetWriter(DataWriter):
+    def write(self, df: pd.DataFrame, file_name: str):
+        df.to_parquet(file_name, index=False)
 
-MLB_HEADERS = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://baseballsavant.mlb.com/statcast_search",
-        "Connection":"close"
-}
+class JSONWriter(DataWriter):
+    def write(self, df: pd.DataFrame, file_name: str):
+        df.to_json(file_name, orient="records", lines=True)
 
-MiLB_HEADERS = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://baseballsavant.mlb.com/statcast-search-minors",
-        "Connection":"close"
-}
+class LeagueFetcher(ABC):
+    @abstractmethod
+    def fetch(self, start_date, end_date, file_name, args):
+        pass               
 
-PARAMS_DICT = {
-            "all": "true",                  
-            "type": "details"
-}
+class MLBFetcher(LeagueFetcher):
+    def fetch(self, start_date, end_date, file_name, args):
+        logging.info("Getting data for mlb")
+        _fetch_data_in_parallel(start_date, end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, args.chunk_size, args.step_days, args.max_workers, args.writer)
 
+class MiLBFetcher(LeagueFetcher):
+    def fetch(self, start_date, end_date, file_name, args):
+        logging.info("Getting data for milb")
+        params = PARAMS_DICT.copy()
+        params.update({"minors": "true"})
+        _fetch_data_in_parallel(start_date, end_date, BASE_MiLB_URL, MiLB_HEADERS, params, file_name, args.chunk_size, args.step_days, args.max_workers, args.writer)        
 
 #start_date: the beginning date of the range (expected to be a datetime.date object).
 #end_date: the end date of the range (inclusive).
@@ -126,10 +144,12 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
 #   chunk_size: How many days of data each chunk should cover (default is 7).
 #   step_days: Optional; if set, controls the sliding window step size (e.g., step size smaller than chunk size means overlapping).
 #   max_workers: Number of threads to use concurrently.
-def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters, file_name, chunk_size=7, step_days=None, max_workers=4):
+def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters, file_name, chunk_size, step_days, max_workers, writer):
     """
     Shared logic to fetch Statcast data in parallel and write to a CSV file.
     """
+    logging.debug(f"\nbase url: {base_url} \nheaders: {headers} \nparameters: {parameters} \nfile_name:{file_name} \nchunk_size:{chunk_size} \nstep_days:{step_days}")
+
     start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
     end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
 
@@ -141,7 +161,6 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
 
         # Progress bar for submitting
         with tqdm(total=len(chunks), desc="Submitting chunks", unit="chunk", file=sys.stdout) as submit_bar:
-            #for chunk_start, chunk_end in chunks:
             for _, chunk_start, chunk_end in chunks:
 
                 chunk_start_str = chunk_start.strftime("%Y-%m-%d")
@@ -209,7 +228,8 @@ def main():
     parser.add_argument("end_date", type=str, help="End date (YYYY-MM-DD)")
     parser.add_argument("--league", choices=["mlb", "milb", "both"], default="both",
                         help="Which league data to download: 'mlb', 'milb', or 'both'")
-    parser.add_argument("--file", type=str, help="Output CSV file name (default: statcast_data.csv)")
+    parser.add_argument("--file", type=str, default="statcast", help="Output CSV file name (default: statcast)")
+    parser.add_argument("--format", choices=["csv", "parquet", "json"], default="csv")
     parser.add_argument("--chunk_size", type=int, default=7, help="Days per chunk")
     parser.add_argument("--step_days", type=int, default=None, help="Optional custom step between chunks")
     parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel threads")
@@ -218,25 +238,28 @@ def main():
     args = parser.parse_args()
     setup_logging(args.log)
 
+    writer_map = {
+        "csv": CSVWriter(),
+        "parquet": ParquetWriter(),
+        "json": JSONWriter()
+    }
+
+    args.writer = writer_map[args.format]
+    file_ext = args.format if args.format != "csv" else "csv"
+
 
     if args.league == "mlb":
         start_time = time.time()
-        logging.info("Getting data for mlb")
-        file_name = args.file if args.file else "statcast_mlb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
-
+    
+        MLBFetcher().fetch(args.start_date, args.end_date, f"{args.file}_{args.league}.{file_ext}", args)
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes")
 
     elif args.league == "milb":
         start_time = time.time()
-        milb_params = PARAMS_DICT.copy()
-        milb_params.update({"minors": "true"})
-        logging.info("Getting data for milb")
-        file_name = args.file if args.file else "statcast_milb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
-
+        
+        MiLBFetcher().fetch(args.start_date, args.end_date, f"{args.file}_{args.league}.{file_ext}", args)
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes")
@@ -244,18 +267,10 @@ def main():
     elif args.league == "both":
         start_time = time.time()
         
-        logging.info(f"Getting data for mlb")
-        file_name = args.file if args.file else "statcast_mlb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
-
+        MLBFetcher().fetch(args.start_date, args.end_date, f"{args.file}_mlb.{file_ext}", args)
         print(f"=========================================================================================================================")
-        milb_params = PARAMS_DICT.copy()
-        milb_params.update({"minors": "true"})
        
-        logging.info("Getting data for milb")
-        file_name = args.file.replace(".csv", "_milb.csv") if args.file else "statcast_milb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
-
+        MiLBFetcher().fetch(args.start_date, args.end_date, f"{args.file}_milb.{file_ext}", args)
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
         logging.info(f"Function took {elapsed_time:.4f} minutes for both")
