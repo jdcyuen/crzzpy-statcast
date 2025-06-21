@@ -175,21 +175,19 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
     if all_data:
         logging.debug("⚠️ Saving data to file...")
         final_df = pd.concat(all_data, ignore_index=True)
-
-        with open(file_name, mode='w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-
-            # Write header
-            writer.writerow(final_df.columns)
-
-            # Write rows with progress bar
-            for row in tqdm(final_df.itertuples(index=False, name=None), total=len(final_df), desc="Saving data to CSV", unit="row"):
-                writer.writerow(row)
-
-        logging.info(f"💾 Data saved to {file_name} ({len(final_df)} total rows)")
+        save_dataframe_to_csv(final_df, file_name)
     else:
         logging.debug("⚠️ No data fetched.")
 
+
+
+def save_dataframe_to_csv(df: pd.DataFrame, file_name: str):
+    with open(file_name, mode='w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(df.columns)
+        for row in tqdm(df.itertuples(index=False, name=None), total=len(df), desc="Saving data to CSV", unit="row"):
+            writer.writerow(row)
+    logging.info(f"💾 Data saved to {file_name} ({len(df)} total rows)")
 
 def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     # Convert string dates to datetime objects
@@ -209,11 +207,11 @@ def main():
     parser = argparse.ArgumentParser(description="Download Statcast data for a given date range.")
     parser.add_argument("start_date", type=str, help="Start date (YYYY-MM-DD)")
     parser.add_argument("end_date", type=str, help="End date (YYYY-MM-DD)")
-    parser.add_argument("--league", choices=["mlb", "milb", "both"], default="mlb",
+    parser.add_argument("--league", choices=["mlb", "milb", "both"], default="both",
                         help="Which league data to download: 'mlb', 'milb', or 'both'")
     parser.add_argument("--file", type=str, help="Output CSV file name (default: statcast_data.csv)")
     parser.add_argument("--chunk_size", type=int, default=7, help="Days per chunk")
-    parser.add_argument("--step_days", type=int, help="Optional custom step between chunks")
+    parser.add_argument("--step_days", type=int, default=None, help="Optional custom step between chunks")
     parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel threads")
     parser.add_argument("--log", default="INFO", help="Set the logging level: DEBUG, INFO, WARNING, ERROR, or CRITICAL (default: INFO)")
 
@@ -225,7 +223,7 @@ def main():
         start_time = time.time()
         logging.info("Getting data for mlb")
         file_name = args.file if args.file else "statcast_mlb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=7, step_days=None, max_workers=4)
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
 
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
@@ -237,7 +235,7 @@ def main():
         milb_params.update({"minors": "true"})
         logging.info("Getting data for milb")
         file_name = args.file if args.file else "statcast_milb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=7, step_days=None, max_workers=4)
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
 
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
@@ -248,7 +246,7 @@ def main():
         
         logging.info(f"Getting data for mlb")
         file_name = args.file if args.file else "statcast_mlb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=7, step_days=None, max_workers=4)
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
 
         print(f"=========================================================================================================================")
         milb_params = PARAMS_DICT.copy()
@@ -256,7 +254,7 @@ def main():
        
         logging.info("Getting data for milb")
         file_name = args.file.replace(".csv", "_milb.csv") if args.file else "statcast_milb.csv"
-        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=7, step_days=None, max_workers=4)
+        _fetch_data_in_parallel(args.start_date, args.end_date,  BASE_MiLB_URL, MiLB_HEADERS, milb_params, file_name, chunk_size=args.chunk_size, step_days=args.step_days, max_workers=args.max_workers)
 
         end_time = time.time()
         elapsed_time = (end_time - start_time)/60
