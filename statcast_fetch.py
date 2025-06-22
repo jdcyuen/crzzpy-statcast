@@ -77,7 +77,7 @@ def _daterange(start_date, end_date, chunk_size, step_days=None):
     step = datetime.timedelta(days=step_days if step_days else chunk_size)
     current = start_date
 
-    while current < end_date:
+    while current <= end_date:
         chunk_start = current
         chunk_end = min(current + datetime.timedelta(days=chunk_size - 1), end_date)
         logging.debug(f"Chunk {chunk_num}: start = {chunk_start}  end = {chunk_end}")  # 👈 print chunk_end
