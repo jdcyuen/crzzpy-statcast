@@ -82,6 +82,72 @@ To uninstall a package:
 
 
 
+
+To trigger the GC cloud function:
+
+curl -X POST YOUR_CLOUD_FUNCTION_URL \
+  -H "Content-Type: application/json" \
+  -d '{"start_date":"2024-04-01", "end_date":"2024-04-05", "league":"mlb", "file":"statcast_mlb.csv"}'
+
+
+To get POST YOUR_CLOUD_FUNCTION_URL:
+
+ Option 1: Immediately After Deployment
+
+  After running:
+
+    gcloud functions deploy run_statcast \
+      --runtime python311 \
+      --trigger-http \
+      --allow-unauthenticated \
+      --entry-point run_statcast \
+      --region=us-central1 \
+      --source=.
+  This will deploy your GC cloud function
+
+  The CLI output will include something like this:
+
+  Deploying function (may take a while)...done.
+  availableMemoryMb: 256
+  entryPoint: run_statcast
+  httpsTrigger:
+    url: https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/run_statcast
+  ...
+
+
+  Copy that URL — that’s your function’s HTTP endpoint.
+
+Option 2: Use gcloud functions describe
+  Run this to get the URL at any time:
+    gcloud functions describe run_statcast --region=us-central1 --format="value(httpsTrigger.url)"
+
+  This will return just the URL, like:
+
+  https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/run_statcast
+
+
+Option 3: Google Cloud Console
+  Go to Google Cloud Console → Cloud Functions.
+
+  Click on your function (run_statcast).
+
+  The URL is shown under the Trigger section.
+
+  Once you have it, you can send requests to it like this:
+
+    curl -X POST YOUR_URL -H "Content-Type: application/json" -d '{"start_date":"2024-04-01","end_date":"2024-04-
+
+
+
+
+
+
+
+
+
+
+
+
 * python statcast_fetch.py -h
 * python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
 * python statcast_fetch.py 2024-03-01 2024-03-30 --league both
@@ -91,14 +157,32 @@ Download and Install Pip on macOS:
 
 * python3 -m ensurepip --upgrade
 
+
+
+
+
+
+
+
 New changes:
+
 
 Steps to run on MacOS:
 
 1. download zip file from https://github.com/jdcyuen/crzzpy-statcast, unzip to a different folder, open the folder
 2. pip3 --version to make sure you have pip installed, skip if you are sure you have it
 3. pip3 install -r requirements.txt,  this will install any new packages that has been added to the new version of the python script.
-4. python3 statcast_fetch.py 2024-03-01 2024-03-30 --league both
+4. python3 src.statcast_fetch.py 2024-03-01 2024-03-30 --league both
+
+
+
+
+
+
+
+
+
+
 
 
 

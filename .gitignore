@@ -1,0 +1,5 @@
+.venv/
+.vscode/
+*.csv
+__pycache__/
+app.log

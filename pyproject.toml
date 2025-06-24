@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "statcast-fetcher"
+version = "0.1.0"
+description = "CLI tool for downloading MLB and MiLB Statcast data and saving it in multiple formats."
+authors = [
+  { name = "Joe Yuen", email = "jdcyuen@gmail.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+dependencies = [
+  "pandas",
+  "requests",
+  "tqdm"
+]
+
+[project.scripts]
+statcast-fetch = "statcast_main:main"  # CLI command
+
+[tool.setuptools]
+packages = ["statcast_fetch"]  # OR use find directive below
+
+[tool.setuptools.packages.find]
+where = ["src"]  # So setuptools finds src/statcast_fetch.py
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
