@@ -21,6 +21,25 @@ import requests
 from requests.exceptions import ConnectionError
 # from pybaseball import statcast
 
+# ==============================
+# Progress bar wrapper setup
+# ==============================
+try:
+    from tqdm import tqdm
+except ImportError:
+    tqdm = None
+
+class DummyTqdm:
+    def __init__(self, iterable=None, **kwargs):
+        self.iterable = iterable
+    def __iter__(self): return iter(self.iterable or [])
+    def update(self, *args): pass
+    def close(self): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+
+TQDM_WRAPPER = tqdm  # default
+
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +179,7 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
         futures = []
 
         # Progress bar for submitting
-        with tqdm(total=len(chunks), desc="Submitting chunks", unit="chunk", file=sys.stdout) as submit_bar:
+        with TQDM_WRAPPER(total=len(chunks), desc="Submitting chunks", unit="chunk", file=sys.stdout) as submit_bar:
             for _, chunk_start, chunk_end in chunks:
 
                 chunk_start_str = chunk_start.strftime("%Y-%m-%d")
@@ -173,7 +192,7 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
                 submit_bar.update(1)
 
         # Progress bar for downloading
-        with tqdm(total=len(futures), desc="Downloading chunks", unit="chunk", file=sys.stdout) as download_bar:
+        with TQDM_WRAPPER(total=len(futures), desc="Downloading chunks", unit="chunk", file=sys.stdout) as download_bar:
             for future in as_completed(futures):
                 chunk_start_str, chunk_end_str = future.chunk_info
                 try:
@@ -204,7 +223,7 @@ def save_dataframe_to_csv(df: pd.DataFrame, file_name: str):
     with open(file_name, mode='w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(df.columns)
-        for row in tqdm(df.itertuples(index=False, name=None), total=len(df), desc="Saving data to CSV", unit="row"):
+        for row in TQDM_WRAPPER(df.itertuples(index=False, name=None), total=len(df), desc="Saving data to CSV", unit="row"):
             writer.writerow(row)
     logging.info(f"💾 Data saved to {file_name} ({len(df)} total rows)")
 
@@ -220,7 +239,9 @@ def calculate_days(start_date_str, end_date_str, date_format="%Y-%m-%d"):
     return delta.days    
   
 
-def main():    
+def main():  
+
+    global TQDM_WRAPPER  
 
     #Main function to handle command-line arguments.
     parser = argparse.ArgumentParser(description="Download Statcast data for a given date range.")
@@ -234,9 +255,13 @@ def main():
     parser.add_argument("--step_days", type=int, default=None, help="Optional custom step between chunks")
     parser.add_argument("--max_workers", type=int, default=4, help="Number of parallel threads")
     parser.add_argument("--log", default="INFO", help="Set the logging level: DEBUG, INFO, WARNING, ERROR, or CRITICAL (default: INFO)")
+    parser.add_argument("--no_progress", action="store_true", help="Disable progress bars")
 
     args = parser.parse_args()
     setup_logging(args.log)
+
+    if args.no_progress:
+        TQDM_WRAPPER = DummyTqdm
 
     writer_map = {
         "csv": CSVWriter(),
