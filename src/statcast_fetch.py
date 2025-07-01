@@ -8,6 +8,7 @@ import time
 import csv
 from time import sleep
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
 from tqdm import tqdm
 
 from src.config.config import (
@@ -42,7 +43,7 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
     attempt = 0
     while attempt <= max_retries:
         try:
-            import requests
+            
             response = requests.get(base_url, headers=headers, params=params_copy, timeout=180)
             response.raise_for_status()
             df = pd.read_csv(io.BytesIO(response.content))
@@ -116,13 +117,6 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
         logging.warning("⚠️ No data fetched")
 
 
-class DummyTqdm:
-    def __init__(self, *args, **kwargs): pass
-    def update(self, n): pass
-    def __enter__(self): return self
-    def __exit__(self, *args): pass
-
-
 def run_statcast_pipeline(start_date, end_date, league="mlb", file_name=None,
                           chunk_size=7, step_days=None, max_workers=4,
                           log_level="INFO", progress=True):
@@ -178,6 +172,15 @@ def main():
         progress=not args.no_progress
     )
 
+class DummyTqdm:
+    """Fallback when progress bars are disabled."""
+    def __init__(self, *args, **kwargs): pass
+    def update(self, n=1): pass
+    def close(self): pass
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def __iter__(self): return iter([])
+    def write(self, x): pass
 
 if __name__ == "__main__":
     main()
