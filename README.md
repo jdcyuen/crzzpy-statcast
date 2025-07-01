@@ -1,6 +1,7 @@
 # crzzpy-statcast
 
-Git repository : 		E:\statcast\crzzpy-statcast
+Git repository : 		E:\s
+tatcast\crzzpy-statcast
 Remote Git repository:	https://github.com/jdcyuen/crzzpy-statcast
 Google Cloud console:   https://console.cloud.google.com/welcome?project=crzzpy&pli=1&inv=1&invt=AbxYfQ
 
@@ -172,7 +173,7 @@ Steps to run on MacOS:
 1. download zip file from https://github.com/jdcyuen/crzzpy-statcast, unzip to a different folder, open the folder
 2. pip3 --version to make sure you have pip installed, skip if you are sure you have it
 3. pip3 install -r requirements.txt,  this will install any new packages that has been added to the new version of the python script.
-4. python3 src.statcast_fetch.py 2024-03-01 2024-03-30 --league both
+4. python3 -m src.statcast_fetch 2024-03-01 2024-03-30 --league both
 
 
 
