@@ -80,8 +80,46 @@ To uninstall a package:
 * to stop working in virtual environment type: deactivate
 * to remove virtual environment type: rm -rf .venv
 
+✅ 1. Ensure gcloud is installed and authenticated
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+gcloud config list
 
+✅ 2. Test locally with command-line
+Make sure your function runs correctly from the command line:
+python -m src.statcast_fetch 2024-03-01 2024-03-30 --league both
 
+✅ 3. Freeze dependencies into requirements.txt
+If not already done:
+pip freeze > requirements.txt
+
+✅ 4. Check file structure
+Ensure you have the following:
+main.py                 ← GCF entry point
+src/statcast_fetch.py   ← Contains core logic
+requirements.txt
+
+And your main.py should expose an HTTP function like:
+def run_statcast(request): ...
+
+✅ 5. (Optional) Add .gcloudignore
+Exclude unnecessary files:
+__pycache__/
+*.pyc
+.env
+tests/
+*.md
+
+✅ 6. Deploy
+Run this from the root directory (crzzpy-statcast/):
+
+gcloud functions deploy run_statcast \
+  --runtime python311 \
+  --trigger-http \
+  --allow-unauthenticated \
+  --entry-point run_statcast \
+  --region=us-central1 \
+  --source=.
 
 
 To trigger the GC cloud function:
@@ -140,32 +178,14 @@ Option 3: Google Cloud Console
 
 
 
-
-
-
-
-
-
-
-
-
-* python statcast_fetch.py -h
-* python statcast_fetch.py 2024-03-01 2024-03-30 --league milb --output statcast_data.csv
-* python statcast_fetch.py 2024-03-01 2024-03-30 --league both
-
-
 Download and Install Pip on macOS:
 
 * python3 -m ensurepip --upgrade
 
-
-
-
-
-
-
-
 New changes:
+
+* Requests are chunked and made in parallel
+* New progress bars
 
 
 Steps to run on MacOS:
