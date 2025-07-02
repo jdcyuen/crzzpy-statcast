@@ -1,6 +1,6 @@
 # main.py
 from flask import Request
-from src.statcast_fetch import run_statcast_pipeline
+from src.statcast_fetch import run_statcast_download
 
 def run_statcast(request: Request):
     """HTTP Cloud Function entry point."""
@@ -16,7 +16,7 @@ def run_statcast(request: Request):
     if not start_date or not end_date:
         return "Missing required parameters: start_date and end_date", 400
 
-    run_statcast_pipeline(
+    run_statcast_download(
         start_date=start_date,
         end_date=end_date,
         league=league,

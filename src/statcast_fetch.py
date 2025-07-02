@@ -117,7 +117,7 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
         logging.warning("⚠️ No data fetched")
 
 
-def run_statcast_pipeline(start_date, end_date, league="mlb", file_name=None,
+def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
                           chunk_size=7, step_days=None, max_workers=4,
                           log_level="INFO", progress=True):
     setup_logging(log_level)
@@ -160,7 +160,7 @@ def main():
 
     args = parser.parse_args()
 
-    run_statcast_pipeline(
+    run_statcast_download(
         start_date=args.start_date,
         end_date=args.end_date,
         league=args.league,
