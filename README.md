@@ -1,7 +1,6 @@
 # crzzpy-statcast
 
-Git repository : 		E:\s
-tatcast\crzzpy-statcast
+Git repository : 		E:\statcast\crzzpy-statcast
 Remote Git repository:	https://github.com/jdcyuen/crzzpy-statcast
 Google Cloud console:   https://console.cloud.google.com/welcome?project=crzzpy&pli=1&inv=1&invt=AbxYfQ
 
@@ -186,6 +185,9 @@ New changes:
 
 * Requests are chunked and made in parallel
 * New progress bars
+
+7/9/2025
+* Add clean_dataframe method, replace nan in data with none
 
 
 Steps to run on MacOS:
