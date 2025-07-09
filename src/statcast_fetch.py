@@ -10,6 +10,7 @@ from time import sleep
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 from tqdm import tqdm
+import numpy as np
 
 from src.config.config import (
     BASE_MLB_URL, BASE_MiLB_URL,
@@ -97,7 +98,11 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
                 chunk_start_str, chunk_end_str = future.chunk_info
                 try:
                     df_chunk = future.result()
+                    logging.debug(f"📥 Raw chunk: {chunk_start_str}–{chunk_end_str}, rows={len(df_chunk)}")
                     if not df_chunk.empty:
+                        logging.debug(f"🧼 Before cleaning: {df_chunk.shape}")
+                        df_chunk = clean_dataframe(df_chunk)
+                        logging.debug(f"🧼 After cleaning: {df_chunk.shape}")
                         all_data.append(df_chunk)
                 except Exception as e:
                     logging.debug(f"💥 Exception in chunk {chunk_start_str} to {chunk_end_str}: {e}")
@@ -115,6 +120,23 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
         logging.info(f"💾 Data saved to {file_name} ({len(final_df)} rows)")
     else:
         logging.warning("⚠️ No data fetched")
+
+def clean_dataframe(df_chunk):
+    """Cleans DataFrame for BigQuery insertion: handles NaN, None, and timestamps."""
+    df_chunk = df_chunk.copy()  # Avoid modifying the original DataFrame
+    
+    # ✅ Convert timestamps to string format
+    for col in df_chunk.select_dtypes(include=["datetime64"]).columns:
+        df_chunk[col] = df_chunk[col].astype(str)  # Converts to 'YYYY-MM-DD HH:MM:SS'
+    
+    # ✅ Convert game_date to YYYY-MM-DD format
+    if "game_date" in df_chunk.columns:
+        df_chunk["game_date"] = pd.to_datetime(df_chunk["game_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    # ✅ Convert all NaN-like values to None
+    df_chunk = df_chunk.replace({np.nan: None, pd.NA: None, None: None})
+
+    return df_chunk
 
 
 def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
