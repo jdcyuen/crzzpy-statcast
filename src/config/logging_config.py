@@ -44,7 +44,7 @@ def setup_logging(level_name: str, log_file: str = "app.log"):
     ))
 
     # Clear root logger handlers and apply colorlog setup
-    root_logger = colorlog.getLogger()
+    root_logger = logging.getLogger()
     root_logger.setLevel(ALLOWED_LEVELS[level_name_upper])
     root_logger.handlers = []  # Clear existing handlers
     root_logger.addHandler(handler)
