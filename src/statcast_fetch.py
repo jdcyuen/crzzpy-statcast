@@ -6,6 +6,7 @@ import logging
 import sys
 import time
 import csv
+import os
 from time import sleep
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
@@ -23,6 +24,24 @@ logger = logging.getLogger(__name__)
 
 
 def _daterange(start_date, end_date, chunk_size, step_days=None):
+
+    """
+        Yields date chunks between start_date and end_date.
+
+        Args:
+            start_date (datetime.date): Start of the range.
+            end_date (datetime.date): End of the range.
+            chunk_size (int): Number of days in each chunk.
+            step_days (int, optional): Days to step forward after each chunk. 
+                                    Defaults to chunk_size (non-overlapping).
+
+        Yields:
+            tuple: (chunk_num, chunk_start_date, chunk_end_date)
+    """
+
+
+    logging.info(f"chunk_size {chunk_size}: step_days = {step_days}")
+
     chunk_num = 1
     step = datetime.timedelta(days=step_days if step_days else chunk_size)
     current = start_date
@@ -69,7 +88,7 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
 
 
 def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
-                            file_name, chunk_size=7, step_days=None, max_workers=4,
+                            file_name, chunk_size=5, step_days=None, max_workers=4,
                             writer=None, progress=True):
     start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
     end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
@@ -98,11 +117,12 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
                 chunk_start_str, chunk_end_str = future.chunk_info
                 try:
                     df_chunk = future.result()
-                    logging.debug(f"📥 Raw chunk: {chunk_start_str}–{chunk_end_str}, rows={len(df_chunk)}")
-                    if not df_chunk.empty:
+                    logging.debug(f"📥 Raw chunk: {chunk_start_str} to {chunk_end_str}, rows={len(df_chunk)}")
+
+                    if not df_chunk.empty:                    
                         logging.debug(f"🧼 Before cleaning: {df_chunk.shape}")
                         df_chunk = clean_dataframe(df_chunk)
-                        logging.debug(f"🧼 After cleaning: {df_chunk.shape}")
+                        logging.debug(f"🧼 After cleaning: {df_chunk.shape}")                   
                         all_data.append(df_chunk)
                 except Exception as e:
                     logging.debug(f"💥 Exception in chunk {chunk_start_str} to {chunk_end_str}: {e}")
@@ -116,7 +136,10 @@ def _fetch_data_in_parallel(start_date, end_date, base_url, headers, parameters,
             csv_writer.writerow(final_df.columns)
             for row in tqdm_func(final_df.itertuples(index=False, name=None),
                                  total=len(final_df), desc="Saving to CSV", unit="row"):
+           
+                # logging.debug(f"💾 row saved: {row}")
                 csv_writer.writerow(row)
+                
         logging.info(f"💾 Data saved to {file_name} ({len(final_df)} rows)")
     else:
         logging.warning("⚠️ No data fetched")
@@ -138,9 +161,17 @@ def clean_dataframe(df_chunk):
 
     return df_chunk
 
+def count_rows_in_csv(file_name):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, file_name)
+
+    with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        row_count = sum(1 for _ in reader)
+    print(f"  Total number of rows in '{file_name}': {row_count}. ",  end="\n")
 
 def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
-                          chunk_size=7, step_days=None, max_workers=4,
+                          chunk_size=5, step_days=None, max_workers=4,
                           log_level="INFO", progress=True):
     setup_logging(log_level)
 
@@ -152,6 +183,7 @@ def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
             start_date, end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT,
             file, chunk_size, step_days, max_workers, progress=progress
         )
+        count = count_rows_in_csv("E:\statcast\crzzpy-statcast\statcast_mlb.csv")
 
     if league in ("milb", "both"):
         logging.info("📦 Fetching MiLB data...")
@@ -174,11 +206,12 @@ def main():
     parser.add_argument("end_date", help="End date (YYYY-MM-DD)")
     parser.add_argument("--league", choices=["mlb", "milb", "both"], default="mlb")
     parser.add_argument("--file_name", help="Output CSV file name")
-    parser.add_argument("--chunk_size", type=int, default=7)
+    parser.add_argument("--chunk_size", type=int, default=5)
     parser.add_argument("--step_days", type=int)
     parser.add_argument("--max_workers", type=int, default=4)
     parser.add_argument("--log_level", default="INFO")
     parser.add_argument("--no_progress", action="store_true", help="Disable progress bars")
+    parser.add_argument("--log-to-file", action="store_true", help="Enable logging to file (app.log)")
 
     args = parser.parse_args()
 
