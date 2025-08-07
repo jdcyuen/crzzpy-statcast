@@ -22,7 +22,7 @@ def setup_logging(level_name: str, log_file: str = "app.log"):
         print("✅ Allowed values: " + ", ".join(l.lower() for l in ALLOWED_LEVELS))
         sys.exit(1)
 
-    # Set up colorlog handler and formatter
+    # Set up colorlog handler and formatter for terminal handler
     handler = colorlog.StreamHandler()
     handler.setFormatter(colorlog.ColoredFormatter(
         fmt="%(log_color)s[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s] %(message)s",
