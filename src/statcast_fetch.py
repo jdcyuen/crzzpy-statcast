@@ -162,13 +162,14 @@ def clean_dataframe(df_chunk):
     return df_chunk
 
 def count_rows_in_csv(file_name):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, file_name)
+    #script_dir = os.path.dirname(os.path.abspath(__file__))
+    #file_path = os.path.join(script_dir, file_name)
 
-    with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
+    with open(file_name, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         row_count = sum(1 for _ in reader)
     print(f"  Total number of rows in '{file_name}': {row_count}. ",  end="\n")
+    return row_count
 
 def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
                           chunk_size=5, step_days=None, max_workers=4,
@@ -183,7 +184,8 @@ def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
             start_date, end_date, BASE_MLB_URL, MLB_HEADERS, PARAMS_DICT,
             file, chunk_size, step_days, max_workers, progress=progress
         )
-        count = count_rows_in_csv("E:\statcast\crzzpy-statcast\statcast_mlb.csv")
+        count = count_rows_in_csv(file)
+        return 
 
     if league in ("milb", "both"):
         logging.info("📦 Fetching MiLB data...")
