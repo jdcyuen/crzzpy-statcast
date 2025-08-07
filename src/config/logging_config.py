@@ -12,7 +12,7 @@ ALLOWED_LEVELS = {
     "NOTSET": logging.NOTSET
 }
 
-def setup_logging(level_name: str, log_file: str = "app.log"):
+def setup_logging(level_name: str, log_file: str = "statcast.log"):
     level_name_upper = level_name.upper()
     if level_name_upper not in ALLOWED_LEVELS:
         print(f"❌ Invalid log level: '{level_name}'")
