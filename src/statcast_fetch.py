@@ -174,7 +174,7 @@ def count_rows_in_csv(file_name):
 def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
                           chunk_size=5, step_days=None, max_workers=4,
                           log_level="INFO", progress=True):
-    setup_logging(log_level)
+    #setup_logging(log_level)
 
     start_time = time.time()
     if league in ("mlb", "both"):
@@ -185,7 +185,7 @@ def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
             file, chunk_size, step_days, max_workers, progress=progress
         )
         count = count_rows_in_csv(file)
-        return 
+
 
     if league in ("milb", "both"):
         logging.info("📦 Fetching MiLB data...")
@@ -213,9 +213,21 @@ def main():
     parser.add_argument("--max_workers", type=int, default=4)
     parser.add_argument("--log_level", default="INFO")
     parser.add_argument("--no_progress", action="store_true", help="Disable progress bars")
-    parser.add_argument("--log-to-file", action="store_true", help="Enable logging to file (app.log)")
+
+
+    '''
+    | Command                    | Behavior              |
+    | -------------------------- | --------------------- |
+    | `--log-to-file`            | Logs to `statcast.log`|
+    | `--log-to-file my_log.txt` | Logs to `my_log.txt`  |
+    | (No `--log-to-file`)       | Console logging only  |
+
+    '''
+    parser.add_argument("--log-to-file", nargs="?", const="statcast.log", metavar="LOG_FILE",
+        help="Enable logging to a file (default: statcast.log). Optionally provide a custom log file name.")
 
     args = parser.parse_args()
+    setup_logging(args.log_level, log_file=args.log_to_file)
 
     run_statcast_download(
         start_date=args.start_date,
