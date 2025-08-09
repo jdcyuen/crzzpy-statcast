@@ -1,6 +1,4 @@
 import logging
-import sys
-import difflib
 import colorlog
 
 ALLOWED_LEVELS = {
@@ -12,40 +10,51 @@ ALLOWED_LEVELS = {
     "NOTSET": logging.NOTSET
 }
 
-def setup_logging(level_name: str, log_file: str = "statcast.log"):
-    level_name_upper = level_name.upper()
-    if level_name_upper not in ALLOWED_LEVELS:
-        print(f"❌ Invalid log level: '{level_name}'")
-        suggestions = difflib.get_close_matches(level_name_upper, ALLOWED_LEVELS.keys(), n=1)
-        if suggestions:
-            print(f"💡 Did you mean: '{suggestions[0].lower()}'?")
-        print("✅ Allowed values: " + ", ".join(l.lower() for l in ALLOWED_LEVELS))
-        sys.exit(1)
+def setup_logging(level_name: str, log_file=None):
+    """
+    Sets up logging to the console and optionally to a log file.
+    
+    Args:
+        level (str): Logging level name (e.g., "INFO", "DEBUG").
+        log_file (str or None): Path to the log file. If None, no file logging is enabled.
+    """
 
-    # Set up colorlog handler and formatter for terminal handler
-    handler = colorlog.StreamHandler()
-    handler.setFormatter(colorlog.ColoredFormatter(
+    level_name_upper = level_name.upper()
+    numeric_level = ALLOWED_LEVELS.get(level_name_upper, logging.INFO)
+
+    # Define log format
+    formatter = colorlog.ColoredFormatter(
         fmt="%(log_color)s[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         log_colors={
-            'DEBUG':    'cyan',
-            'INFO':     'green',
-            'WARNING':  'yellow',
-            'ERROR':    'red',
-            'CRITICAL': 'bold_red',
+            "DEBUG": "cyan",
+            "INFO": "green",
+            "WARNING": "yellow",
+            "ERROR": "red",
+            "CRITICAL": "bold_red"
         }
-    ))
+    )
+    
+    handlers = []
 
-     # File handler (no color)
-    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')  # or mode='a' to append
-    file_handler.setFormatter(logging.Formatter(
-        fmt="[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    ))
+    # Console handler with colors
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    handlers.append(console_handler)
+    
 
-    # Clear root logger handlers and apply colorlog setup
-    root_logger = logging.getLogger()
-    root_logger.setLevel(ALLOWED_LEVELS[level_name_upper])
-    root_logger.handlers = []  # Clear existing handlers
-    root_logger.addHandler(handler)
-    root_logger.addHandler(file_handler)
+    # Optional file handler (no color)
+    if log_file:
+        file_formatter = logging.Formatter(
+            fmt="[%(asctime)s] [%(levelname)s] [%(name)s:%(funcName)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        file_handler.setFormatter(file_formatter)
+        handlers.append(file_handler)
+
+    logging.basicConfig(level=numeric_level, handlers=handlers, force=True)
+
+   
+
+    
