@@ -19,9 +19,7 @@ from src.config.config import (
 )
 from src.config.logging_config import setup_logging
 
-
 logger = logging.getLogger(__name__)
-
 
 def _daterange(start_date, end_date, chunk_size, step_days=None):
 
@@ -71,7 +69,8 @@ def _fetch_chunk(start_date_str, end_date_str, base_url, headers, parameters, ma
             return df
 
         except requests.exceptions.RequestException as e:
-            logging.error(f"❌ Request error ({attempt + 1}/{max_retries}) from {start_date_str} to {end_date_str}: {e}")
+            #logging.error(f"❌ Request error ({attempt + 1}/{max_retries}) from {start_date_str} to {end_date_str}: {e}")
+            logging.error(f"❌ Request error ({attempt}/{max_retries}) from {start_date_str} to {end_date_str}: {e}")
             attempt += 1
             if attempt > max_retries:
                 logging.error(f"❌ All retries failed for {start_date_str} to {end_date_str}")
@@ -162,13 +161,10 @@ def clean_dataframe(df_chunk):
     return df_chunk
 
 def count_rows_in_csv(file_name):
-    #script_dir = os.path.dirname(os.path.abspath(__file__))
-    #file_path = os.path.join(script_dir, file_name)
-
     with open(file_name, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         row_count = sum(1 for _ in reader)
-    print(f"  Total number of rows in '{file_name}': {row_count}. ",  end="\n")
+    logging.info(f"  Total number of rows in '{file_name}': {row_count}.")
     return row_count
 
 def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
@@ -197,6 +193,7 @@ def run_statcast_download(start_date, end_date, league="mlb", file_name=None,
             start_date, end_date, BASE_MiLB_URL, MiLB_HEADERS, milb_params,
             file, chunk_size, step_days, max_workers, progress=progress
         )
+        count = count_rows_in_csv(file)
 
     elapsed = (time.time() - start_time) / 60
     logging.info(f"⏱️ Completed in {elapsed:.2f} minutes")
@@ -216,11 +213,11 @@ def main():
 
 
     '''
-    | Command                    | Behavior              |
-    | -------------------------- | --------------------- |
-    | `--log-to-file`            | Logs to `statcast.log`|
-    | `--log-to-file my_log.txt` | Logs to `my_log.txt`  |
-    | (No `--log-to-file`)       | Console logging only  |
+    | Command                    | Behavior                   |
+    | -------------------------- | -------------------------- |
+    | `--log-to-file`            | Logs to `logs/statcast.log`|
+    | `--log-to-file my_log.txt` | Logs to `my_log.txt`       |
+    | (No `--log-to-file`)       | Console logging only       |
 
     '''
     parser.add_argument("--log-to-file", nargs="?", const="statcast.log", metavar="LOG_FILE",
