@@ -189,12 +189,16 @@ New changes:
 7/9/2025
 * Add clean_dataframe method, replace nan in data with none
 
+8/19/2025
+*Added yaml file for configuration. Added ability to save to BigQuery. Disabled saving to csv file for now.
+
 
 Steps to run on MacOS:
 
 1. download zip file from https://github.com/jdcyuen/crzzpy-statcast, unzip to a different folder, open the folder
 2. pip3 --version to make sure you have pip installed, skip if you are sure you have it
 3. pip3 install -r requirements.txt,  this will install any new packages that has been added to the new version of the python script.
+3. Edit config.yaml. Change dataset_id.
 4. python3 -m src.statcast_fetch 2024-03-01 2024-03-30 --league both
 
 

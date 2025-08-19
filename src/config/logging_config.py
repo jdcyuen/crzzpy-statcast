@@ -20,7 +20,7 @@ def setup_logging(level_name: str = None, log_file: str = None):
         level_name (str): Logging level name (e.g., "INFO", "DEBUG").
         log_file (str or None): Path to the log file. If None, defaults to logs/statcast.log.
     """
-    print(f"Initial log_file arg: {log_file}")
+    #print(f"Initial log_file arg: {log_file}")
 
     level_str = level_name or LOG_LEVEL
     #log_file_path = log_file or LOG_FILE
@@ -35,15 +35,15 @@ def setup_logging(level_name: str = None, log_file: str = None):
         if os.path.dirname(log_file) == '':
             log_file = os.path.join("logs", log_file)
 
-    print(f"Using log file: {log_file}")
+    #print(f"Using log file: {log_file}")
 
     # Ensure directory exists if there's a folder in the path
     log_dir = os.path.dirname(log_file)
-    print(f"Directory to create: '{log_dir}'")
+    #print(f"Directory to create: '{log_dir}'")
 
     if log_dir:
         os.makedirs(log_dir, exist_ok=True)
-        print(f"Created directory '{log_dir}'")
+        #print(f"Created logs directory '{log_dir}'")
 
     # Define log format
     formatter = colorlog.ColoredFormatter(

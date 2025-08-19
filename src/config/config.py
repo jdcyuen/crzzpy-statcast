@@ -29,3 +29,12 @@ CONSOLE_FORMAT = CONFIG["logging"]["console_format"]
 FILE_FORMAT = CONFIG["logging"]["file_format"]
 DATE_FORMAT = CONFIG["logging"]["date_format"]
 LOG_COLORS = CONFIG["logging"]["log_colors"]
+
+KNOWN_COLUMN_PATH = os.path.join(os.path.dirname(__file__), "column_types.yaml")
+with open(KNOWN_COLUMN_PATH, "r") as f:
+    KNOWN_COLUMNS = yaml.safe_load(f)
+
+KNOWN_COLUMN_TYPES = KNOWN_COLUMNS["known_col_types"]
+#print(f"KNOWN_COLUMN_TYPES: {KNOWN_COLUMN_TYPES}")
+
+
